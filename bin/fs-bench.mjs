@@ -72,16 +72,43 @@ function filesystemInfo(target) {
   return { filesystem:"unknown", encrypted:false, disk:"unknown", mount:target };
 }
 
+function operatingSystemInfo() {
+  if (platform() === "darwin") {
+    const osVersion = runText("sw_vers", ["-productVersion"]);
+    const osBuild = runText("sw_vers", ["-buildVersion"]);
+    return {
+      os:`macOS ${osVersion}`,
+      osVersion,
+      osBuild,
+      osReleaseChannel:osBuild !== "unknown" && /[a-z]$/i.test(osBuild) ? "pre-release" : osBuild === "unknown" ? "unknown" : "stable",
+      kernel:`Darwin ${release()}`,
+    };
+  }
+  if (platform() === "linux") {
+    const distribution = runText("sh", ["-c", ". /etc/os-release 2>/dev/null && printf '%s' \"$PRETTY_NAME\""]);
+    return {
+      os:distribution === "unknown" ? `Linux ${release()}` : distribution,
+      osVersion:distribution === "unknown" ? release() : distribution,
+      osBuild:release(),
+      osReleaseChannel:"unknown",
+      kernel:`Linux ${release()}`,
+    };
+  }
+  return { os:`${platform()} ${release()}`, osVersion:release(), osBuild:release(), osReleaseChannel:"unknown", kernel:release() };
+}
+
 function systemInfo(target) {
   const cpu = platform() === "darwin"
     ? runText("sysctl", ["-n", "machdep.cpu.brand_string"])
     : runText("sh", ["-c", "lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1"]);
   const virtualization = platform() === "linux" ? runText("systemd-detect-virt", []) : "None";
+  const normalizedVirtualization = virtualization === "none" || virtualization === "unknown" ? "None" : virtualization;
   return {
-    os:`${platform()} ${release()}`,
+    ...operatingSystemInfo(),
+    environment:platform() === "darwin" ? "Native macOS" : platform() === "linux" ? (normalizedVirtualization === "None" ? "Native Linux" : "Linux VM") : "Local",
     cpu,
     memoryGb:Math.round(totalmem() / 1024 ** 3),
-    virtualization:virtualization === "none" || virtualization === "unknown" ? "None" : virtualization,
+    virtualization:normalizedVirtualization,
     node:process.version,
     pnpm:runText("pnpm", ["--version"]),
     git:runText("git", ["--version"]),

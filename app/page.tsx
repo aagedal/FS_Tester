@@ -7,6 +7,9 @@ type Run = {
   label: string;
   environment: string;
   os: string;
+  osVersion?: string;
+  osBuild?: string;
+  osReleaseChannel?: "stable" | "pre-release" | "unknown";
   filesystem: string;
   encrypted: boolean;
   disk: string;
@@ -25,6 +28,9 @@ type WorktreeResult = {
   id: string;
   label: string;
   filesystem: string;
+  os?: string;
+  osBuild?: string;
+  osReleaseChannel?: "stable" | "pre-release" | "unknown";
   stack: "plain" | "vdo" | "cow" | "other";
   createOne: number | null;
   createParallel: number | null;
@@ -45,15 +51,16 @@ const sampleRuns: Run[] = [
   { id:"m2-vm-enc", label:"Linux VM · encrypted", environment:"Parallels VM", os:"Ubuntu 24.04", filesystem:"ext4 + LVM2", encrypted:true, disk:"Virtual disk on Apple SSD", cpu:"Apple M2 Max · 6 vCPU", memoryGb:16, virtualization:"Parallels", clean:2.8, install:11.9, iterations:1, date:"2025-02-14", note:"Guest volume encryption enabled", source:"sample" },
   { id:"m4-apfs", label:"Mac internal · M4", environment:"Native macOS", os:"macOS 15.2", filesystem:"APFS", encrypted:true, disk:"Apple SSD AP1024Z", cpu:"Apple M4", memoryGb:16, virtualization:"None", clean:29.6, install:31.4, iterations:1, date:"2025-02-08", note:"Community reference run", source:"sample" },
   { id:"m4-vm", label:"Linux VM · M4", environment:"UTM VM", os:"Ubuntu 24.10", filesystem:"ext4", encrypted:false, disk:"Virtual disk on Apple SSD", cpu:"Apple M4 Pro · 6 vCPU", memoryGb:6, virtualization:"UTM", clean:2.5, install:16.9, iterations:1, date:"2025-02-26", note:"Cross-model reference; do not treat as paired", source:"sample" },
+  { id:"linux-7900x-ext4", label:"Native Linux reference", environment:"Native Linux", os:"Ubuntu 24.04.1", filesystem:"ext4", encrypted:false, disk:"Samsung SSD 980 Pro 2TB", cpu:"AMD Ryzen 9 7900X · 12C/24T", memoryGb:64, virtualization:"None", clean:6.0, install:4.3, iterations:1, date:"2025-02-07", note:"Screenshot reference · different hardware; context only, not a matched APFS comparison", source:"sample" },
 ];
 
 const worktreeSamples: WorktreeResult[] = [
-  { id:"wt-apfs", label:"APFS", filesystem:"APFS", stack:"cow", createOne:1.263, createParallel:null, cleanGiB:.239, installedGiB:.349, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Screenshot reference · APFS value for parallel creation was obscured", source:"screenshot" },
-  { id:"wt-btrfs", label:"Btrfs", filesystem:"btrfs", stack:"cow", createOne:.652, createParallel:2.109, cleanGiB:.139, installedGiB:.538, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Screenshot reference", source:"screenshot" },
-  { id:"wt-ext4", label:"ext4", filesystem:"ext4", stack:"plain", createOne:.639, createParallel:.671, cleanGiB:.236, installedGiB:.604, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Screenshot reference", source:"screenshot" },
-  { id:"wt-xfs", label:"XFS", filesystem:"XFS", stack:"plain", createOne:.646, createParallel:.680, cleanGiB:.239, installedGiB:.386, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Plain XFS · screenshot reference", source:"screenshot" },
-  { id:"wt-vdo", label:"XFS + VDO", filesystem:"XFS", stack:"vdo", createOne:.647, createParallel:.702, cleanGiB:.128, installedGiB:.195, worktreeCount:8, storageBasis:"physical-delta", note:"VDO deduplication + compression · physical allocation", source:"screenshot" },
-  { id:"wt-zfs", label:"ZFS", filesystem:"ZFS", stack:"cow", createOne:.775, createParallel:1.081, cleanGiB:.019, installedGiB:.319, worktreeCount:10, storageBasis:"physical-delta", note:"10-worktree quick pass · physical allocation", source:"screenshot" },
+  { id:"wt-apfs", label:"APFS", filesystem:"APFS", os:"macOS (version not shown)", stack:"cow", createOne:1.263, createParallel:null, cleanGiB:.239, installedGiB:.349, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Native Apple M5 Max · parallel value was obscured", source:"screenshot" },
+  { id:"wt-btrfs", label:"Btrfs", filesystem:"btrfs", os:"Linux (version not shown)", stack:"cow", createOne:.652, createParallel:2.109, cleanGiB:.139, installedGiB:.538, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Native AMD Ryzen AI Max+ 395 · screenshot reference", source:"screenshot" },
+  { id:"wt-ext4", label:"ext4", filesystem:"ext4", os:"Linux (version not shown)", stack:"plain", createOne:.639, createParallel:.671, cleanGiB:.236, installedGiB:.604, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Native AMD Ryzen AI Max+ 395 · screenshot reference", source:"screenshot" },
+  { id:"wt-xfs", label:"XFS", filesystem:"XFS", os:"Linux (version not shown)", stack:"plain", createOne:.646, createParallel:.680, cleanGiB:.239, installedGiB:.386, worktreeCount:8, storageBasis:"filesystem-allocated", note:"Native AMD Ryzen AI Max+ 395 · plain XFS", source:"screenshot" },
+  { id:"wt-vdo", label:"XFS + VDO", filesystem:"XFS", os:"Linux (version not shown)", stack:"vdo", createOne:.647, createParallel:.702, cleanGiB:.128, installedGiB:.195, worktreeCount:8, storageBasis:"physical-delta", note:"Native AMD Ryzen AI Max+ 395 · VDO physical allocation", source:"screenshot" },
+  { id:"wt-zfs", label:"ZFS", filesystem:"ZFS", os:"Linux (version not shown)", stack:"cow", createOne:.775, createParallel:1.081, cleanGiB:.019, installedGiB:.319, worktreeCount:10, storageBasis:"physical-delta", note:"Native AMD Ryzen AI Max+ 395 · 10-worktree quick pass", source:"screenshot" },
 ];
 
 const fmt = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)}s`;
@@ -70,6 +77,7 @@ export default function Home() {
   const [metric, setMetric] = useState<"clean" | "install">("clean");
   const [spaceMetric, setSpaceMetric] = useState<"cleanGiB" | "installedGiB">("installedGiB");
   const [filter, setFilter] = useState("All environments");
+  const [osFilter, setOsFilter] = useState("All OS versions");
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
   const [toast, setToast] = useState("");
@@ -95,10 +103,14 @@ export default function Home() {
     const groupMatch = filter === "All environments" ||
       (filter === "Native macOS" && run.environment === "Native macOS") ||
       (filter === "Linux VM" && run.virtualization !== "None") ||
+      (filter === "Native Linux" && run.environment === "Native Linux") ||
       (filter === "Encrypted" && run.encrypted);
     const haystack = `${run.label} ${run.os} ${run.filesystem} ${run.cpu}`.toLowerCase();
-    return groupMatch && haystack.includes(query.toLowerCase());
-  }), [filter, query, runs]);
+    const osMatch = osFilter === "All OS versions" || run.os === osFilter;
+    return groupMatch && osMatch && haystack.includes(query.toLowerCase());
+  }), [filter, osFilter, query, runs]);
+
+  const osVersions = useMemo(() => [...new Set(runs.map((run) => run.os))].sort(), [runs]);
 
   const chartRuns = filtered.slice(0, 6);
   const maxValue = Math.max(...chartRuns.map((run) => run[metric]), 1);
@@ -145,6 +157,9 @@ export default function Home() {
             id:String(item.id ?? `worktree-${Date.now()}-${index}`),
             label:String(item.label ?? `${item.filesystem ?? "Filesystem"} worktrees`),
             filesystem:String(item.filesystem ?? "Unknown"),
+            os:item.os == null ? undefined : String(item.os),
+            osBuild:item.osBuild == null ? undefined : String(item.osBuild),
+            osReleaseChannel:item.osReleaseChannel === "stable" || item.osReleaseChannel === "pre-release" ? item.osReleaseChannel : "unknown",
             stack:item.stack === "vdo" || item.storageBasis === "physical-delta" ? "vdo" : item.stack === "cow" ? "cow" : "plain",
             createOne:item.createOne == null ? null : Number(item.createOne),
             createParallel:item.createParallel == null ? null : Number(item.createParallel),
@@ -168,6 +183,9 @@ export default function Home() {
             id:String(item.id ?? `worktree-${Date.now()}`),
             label:String(item.label ?? `${item.filesystem ?? "Filesystem"} worktrees`),
             filesystem:String(item.filesystem ?? raw.filesystem ?? "Unknown"),
+            os:String(item.os ?? raw.os ?? "Unknown OS"),
+            osBuild:item.osBuild == null && raw.osBuild == null ? undefined : String(item.osBuild ?? raw.osBuild),
+            osReleaseChannel:item.osReleaseChannel === "stable" || item.osReleaseChannel === "pre-release" ? item.osReleaseChannel : raw.osReleaseChannel === "stable" || raw.osReleaseChannel === "pre-release" ? raw.osReleaseChannel : "unknown",
             stack:item.storageBasis === "physical-delta" || item.vdoDevice ? "vdo" : "plain",
             createOne:item.createOneSeconds == null ? (item.createOne == null ? null : Number(item.createOne)) : Number(item.createOneSeconds),
             createParallel:item.createParallelSeconds == null ? (item.createParallel == null ? null : Number(item.createParallel)) : Number(item.createParallelSeconds),
@@ -194,6 +212,9 @@ export default function Home() {
             label: String(item.label ?? "Imported run"),
             environment: String(item.environment ?? item.virtualization ?? "Local"),
             os: String(item.os ?? "Unknown OS"),
+            osVersion:item.osVersion == null ? undefined : String(item.osVersion),
+            osBuild:item.osBuild == null ? undefined : String(item.osBuild),
+            osReleaseChannel:item.osReleaseChannel === "stable" || item.osReleaseChannel === "pre-release" ? item.osReleaseChannel : "unknown",
             filesystem: String(item.filesystem ?? "Unknown"),
             encrypted: Boolean(item.encrypted),
             disk: String(item.disk ?? "Unknown disk"),
@@ -242,7 +263,7 @@ export default function Home() {
         </nav>
         <div className="sideNote">
           <span className="eyebrow">Current suite</span>
-          <strong>pnpm + worktree suites</strong>
+          <strong>macOS, VM + native Linux</strong>
           <span>{runs.length + worktrees.length} results · local workspace</span>
           <button onClick={exportRuns}>Export dataset <span>↗</span></button>
         </div>
@@ -265,15 +286,15 @@ export default function Home() {
               <div className="heroActions"><button className="primary large" onClick={() => setModal(true)}>Run the benchmark <span>→</span></button><button className="textButton" onClick={() => scrollTo("method")}>Review the test plan</button></div>
             </div>
             <div className="fairnessCard">
-              <div className="fairnessTop"><span>Fairness matrix</span><strong>5 / 6 covered</strong></div>
+              <div className="fairnessTop"><span>Comparison matrix</span><strong>5 / 6 represented</strong></div>
               <div className="segments six"><i></i><i></i><i></i><i></i><i></i><i className="empty"></i></div>
               <ul>
                 <li><span className="done">✓</span><span>Native APFS, encrypted<small>Original baseline</small></span></li>
-                <li><span className="done">✓</span><span>External APFS, unencrypted<small>Controls for encryption</small></span></li>
+                <li><span className="todo">○</span><span>External APFS, unencrypted<small>Pending a real external-drive run</small></span></li>
                 <li><span className="done">✓</span><span>Linux VM on same Mac<small>Controls for host hardware</small></span></li>
                 <li><span className="done">✓</span><span>Plain XFS<small>Filesystem baseline</small></span></li>
                 <li><span className="done">✓</span><span>XFS on VDO<small>Deduplication + compression</small></span></li>
-                <li><span className="todo">○</span><span>Linux native, same Mac<small>Requires Asahi-compatible hardware</small></span></li>
+                <li><span className="done">✓</span><span>Native Linux machine<small>Context point; hardware is not matched</small></span></li>
               </ul>
             </div>
           </section>
@@ -287,7 +308,10 @@ export default function Home() {
                   <button className={metric === "install" ? "selected" : ""} onClick={() => setMetric("install")}>Install</button>
                 </div>
                 <select aria-label="Environment filter" value={filter} onChange={(event) => setFilter(event.target.value)}>
-                  <option>All environments</option><option>Native macOS</option><option>Linux VM</option><option>Encrypted</option>
+                  <option>All environments</option><option>Native macOS</option><option>Linux VM</option><option>Native Linux</option><option>Encrypted</option>
+                </select>
+                <select aria-label="Operating system version filter" value={osFilter} onChange={(event) => setOsFilter(event.target.value)}>
+                  <option>All OS versions</option>{osVersions.map((os) => <option key={os}>{os}</option>)}
                 </select>
               </div>
             </div>
@@ -296,12 +320,12 @@ export default function Home() {
               <div className="chartTop"><span>Median duration · lower is better</span><span>seconds</span></div>
               <div className="bars">
                 {chartRuns.map((run) => <div className="barRow" key={run.id}>
-                  <div className="barLabel"><strong>{run.label}</strong><small>{run.filesystem}{run.encrypted ? " · encrypted" : ""}</small></div>
+                  <div className="barLabel"><strong>{run.label}</strong><small>{run.filesystem} · {run.os}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></div>
                   <div className="barTrack"><i className={run.environment === "Native macOS" ? "macBar" : "linuxBar"} style={{width:`${Math.max(3, run[metric] / maxValue * 100)}%`}}></i></div>
                   <strong className="barValue">{fmt(run[metric])}</strong>
                 </div>)}
               </div>
-              <div className="chartFoot"><span><i className="dot macDot"></i>Native macOS</span><span><i className="dot linuxDot"></i>Linux guest</span><small>Sample community results are illustrative, not a controlled conclusion.</small></div>
+              <div className="chartFoot"><span><i className="dot macDot"></i>Native macOS</span><span><i className="dot linuxDot"></i>Linux VM or native</span><small>Cross-machine Linux results provide context, not a controlled filesystem conclusion.</small></div>
             </div>
           </section>
 
@@ -345,9 +369,10 @@ export default function Home() {
 
             <div className="worktreeTableWrap">
               <table className="worktreeTable">
-                <thead><tr><th>Stack</th><th>Create one</th><th>Create {worktrees[0]?.worktreeCount ?? 8} parallel</th><th>Clean / worktree</th><th>Installed / worktree</th><th>Measurement</th></tr></thead>
+                <thead><tr><th>Stack</th><th>OS version</th><th>Create one</th><th>Create {worktrees[0]?.worktreeCount ?? 8} parallel</th><th>Clean / worktree</th><th>Installed / worktree</th><th>Measurement</th></tr></thead>
                 <tbody>{worktrees.map((run) => <tr key={`${run.id}-matrix`}>
                   <td><strong>{run.label}</strong><small>{run.note}</small></td>
+                  <td><strong>{run.os ?? "Not recorded"}</strong><small>{run.osBuild ? `Build ${run.osBuild}` : "Screenshot did not show it"}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></td>
                   <td className="number">{run.createOne == null ? "—" : fmt(run.createOne)}</td>
                   <td className="number">{run.createParallel == null ? "Obscured" : fmt(run.createParallel)}</td>
                   <td className="number">{run.cleanGiB == null ? "—" : fmtGiB(run.cleanGiB)}</td>
@@ -401,9 +426,10 @@ export default function Home() {
             </div>
             <div className="tableWrap">
               <table>
-                <thead><tr><th>Environment</th><th>Storage</th><th>Controls</th><th>Clean</th><th>Install</th><th>Date</th></tr></thead>
+                <thead><tr><th>Environment</th><th>OS version</th><th>Storage</th><th>Controls</th><th>Clean</th><th>Install</th><th>Date</th></tr></thead>
                 <tbody>{filtered.map((run) => <tr key={run.id}>
                   <td><div className="tablePrimary"><span className={`deviceMark ${run.environment === "Native macOS" ? "mac" : "linux"}`}>{run.environment === "Native macOS" ? "M" : "L"}</span><span><strong>{run.label}</strong><small>{run.cpu}</small></span></div></td>
+                  <td><strong>{run.os}</strong><small>{run.osBuild ? `Build ${run.osBuild}` : "Build not recorded"}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></td>
                   <td><strong>{run.filesystem}</strong><small>{run.disk}</small></td>
                   <td><div className="pills"><span>{run.encrypted ? "Encrypted" : "Unencrypted"}</span>{run.virtualization !== "None" && <span>{run.virtualization}</span>}</div><small>{run.note}</small></td>
                   <td className="number">{fmt(run.clean)}</td><td className="number">{fmt(run.install)}</td><td><strong>{run.date}</strong><small>{run.iterations} iteration{run.iterations === 1 ? "" : "s"}</small></td>
@@ -414,12 +440,13 @@ export default function Home() {
           </section>
 
           <section className="method" id="method">
-            <div><p className="kicker">METHODOLOGY</p><h2>A result is only as fair as its controls.</h2><p>The runner creates an isolated checkout on the target volume, records operation latency and worktree density, and keeps physical VDO allocation distinct from filesystem-reported bytes.</p></div>
+            <div><p className="kicker">METHODOLOGY</p><h2>A result is only as fair as its controls.</h2><p>The runner creates an isolated checkout on the target volume, records the exact OS version and build alongside operation latency and worktree density, and keeps physical VDO allocation distinct from filesystem-reported bytes.</p></div>
             <div className="methodGrid">
               <article><span>01</span><strong>Same workload</strong><p>Fixed repository revision, Node and pnpm versions.</p></article>
               <article><span>02</span><strong>Repeated samples</strong><p>Median of five runs with raw timings retained.</p></article>
               <article><span>03</span><strong>Matched storage stacks</strong><p>Plain XFS and XFS + VDO keep the same guest, disk class, repo revision and pnpm mode.</p></article>
               <article><span>04</span><strong>Honest allocation</strong><p>Logical, allocated and VDO physical bytes remain separate measurements.</p></article>
+              <article><span>05</span><strong>Exact OS build</strong><p>macOS product version, build number and pre-release status are recorded for every new run.</p></article>
             </div>
           </section>
         </div>

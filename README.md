@@ -7,9 +7,10 @@ The dashboard ships with clearly marked sample data from the public [`disk-perf-
 ## What it controls for
 
 - native macOS vs. a Linux guest on the same Apple silicon host
+- a native Linux machine as an explicitly unmatched reference point
 - encrypted vs. unencrypted volumes
 - internal vs. external storage
-- VM/runtime, OS, filesystem, CPU, memory, disk, and test revisions
+- VM/runtime, exact OS version and build, filesystem, CPU, memory, disk, and test revisions
 - repeated measurements and raw samples, rather than only one rounded timing
 - one and parallel worktree creation time
 - clean and installed storage per worktree
@@ -92,7 +93,7 @@ The target must already exist and should have several GiB free. Connecting or mo
 node bin/fs-bench.mjs doctor --target "/Volumes/My SSD"
 ```
 
-Confirm that the reported filesystem, disk, mount point, and encryption state match the setup you intended to test.
+Confirm that the reported filesystem, disk, mount point, encryption state, OS product version, and OS build match the setup you intended to test. On macOS the runner reads `sw_vers`, so a macOS 27 beta run is stored separately from macOS 26. A trailing lowercase letter in an Apple build number is marked as pre-release.
 
 ### 5. Pick a suite and run it
 
@@ -163,9 +164,11 @@ Run the same repository revision and tool versions on each target:
 4. ext4 or btrfs inside a Linux VM stored on the same Mac
 5. plain XFS inside that Linux environment
 6. XFS on an LVM-VDO volume with the same guest and virtual-disk class
-7. optionally, native Linux on that Mac if the hardware supports it
+7. a native Linux machine on its own hardware as a contextual reference
 
-Keep Spotlight and endpoint-security status explicit. A VM result isolates more of macOS and APFS, but still includes virtualization and virtual-disk effects; it is useful evidence, not a pure filesystem-only comparison.
+Keep Spotlight and endpoint-security status explicit. A VM result isolates more of macOS and APFS, but still includes virtualization and virtual-disk effects; it is useful evidence, not a pure filesystem-only comparison. A separate native Linux machine shows what a strong real-world Linux setup can achieve, but CPU, RAM, SSD, controller, kernel, and security differences mean it must not be presented as a controlled APFS-versus-Linux result.
+
+Do not merge results across OS updates. macOS performance changes can affect filesystem-heavy workloads independently of APFS itself, so treat macOS 26, macOS 27 beta, and the final macOS 27 release as separate environments. The build number matters because different beta seeds can behave differently even when the displayed product version is the same.
 
 ## Validate
 

@@ -20,11 +20,14 @@ test("server-renders the FS Bench Lab dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>FS Bench Lab<\/title>/i);
   assert.match(html, /Is APFS really/);
-  assert.match(html, /Fairness matrix/);
+  assert.match(html, /Comparison matrix/);
   assert.match(html, /Linux VM on same Mac/);
+  assert.match(html, /Native Linux machine/);
+  assert.match(html, /Native Linux reference/);
   assert.match(html, /Space is a result, too/);
   assert.match(html, /XFS \+ VDO/);
   assert.match(html, /Guest-native filesystem/);
+  assert.match(html, /Exact OS build/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -39,6 +42,9 @@ test("keeps the runner isolated and the starter removed", async () => {
   assert.match(runner, /suite:"worktrees"/);
   assert.match(runner, /vdoUsedKib/);
   assert.match(runner, /logicalInstalledGiBPerWorktree/);
+  assert.match(runner, /sw_vers/);
+  assert.match(runner, /osReleaseChannel/);
+  assert.match(runner, /environment:platform\(\) === "darwin"/);
   assert.match(runner, /tempRoot\.startsWith/);
   assert.match(page, /window\.localStorage/);
   assert.match(page, /Import results/);
