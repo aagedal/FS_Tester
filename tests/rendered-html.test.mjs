@@ -22,6 +22,9 @@ test("server-renders the FS Bench Lab dashboard", async () => {
   assert.match(html, /Is APFS really/);
   assert.match(html, /Fairness matrix/);
   assert.match(html, /Linux VM on same Mac/);
+  assert.match(html, /Space is a result, too/);
+  assert.match(html, /XFS \+ VDO/);
+  assert.match(html, /Guest-native filesystem/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -33,6 +36,9 @@ test("keeps the runner isolated and the starter removed", async () => {
   ]);
   assert.match(runner, /mkdtempSync\(join\(target, "\.fs-bench-"\)\)/);
   assert.match(runner, /git", \["clean", "-Xfd"\]/);
+  assert.match(runner, /suite:"worktrees"/);
+  assert.match(runner, /vdoUsedKib/);
+  assert.match(runner, /logicalInstalledGiBPerWorktree/);
   assert.match(runner, /tempRoot\.startsWith/);
   assert.match(page, /window\.localStorage/);
   assert.match(page, /Import results/);
