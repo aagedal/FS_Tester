@@ -15,7 +15,7 @@ The dashboard ships with clearly marked sample data from the public [`disk-perf-
 - clean and installed storage per worktree
 - plain XFS versus XFS on VDO, with physical allocation kept separate from `du`
 
-## Start the dashboard
+## Start the dashboard locally
 
 Requires Node.js 22.13 or newer.
 
@@ -26,15 +26,77 @@ npm run dev
 
 Open the local address printed by the development server.
 
-## Inspect a test target
+You do not need to start the dashboard to run a benchmark. The CLI uses only Node.js built-ins; the dashboard is for viewing and comparing the JSON results.
+
+## Run your first benchmark
+
+The website cannot access your disks. Run these commands in Terminal on the Mac or Linux VM you want to measure.
+
+### 1. Install the prerequisites
+
+You need Node.js 22.13 or newer, Git, and pnpm 10. If you have never used this project—or Node.js—start here.
+
+On **macOS**, open **Terminal** from Applications → Utilities. If the `brew` command is not available, install [Homebrew](https://brew.sh/) first. Then run:
 
 ```bash
-node bin/fs-bench.mjs doctor --target "/Volumes/Benchmark"
+brew install node git
+npm install --global pnpm@10
 ```
 
-## Run the benchmark
+On **Ubuntu or Debian**, install a current LTS version of Node.js from the official [Node.js download page](https://nodejs.org/en/download) first. Do not assume the distro’s default Node package is new enough. Then run:
 
-Install `git`, Node.js 22+, and pnpm 10+ first. The target must already exist.
+```bash
+sudo apt update
+sudo apt install git
+npm install --global pnpm@10
+```
+
+For another Linux distribution, install Git with its package manager, install Node.js 22.13 or newer from [nodejs.org](https://nodejs.org/en/download), then run `npm install --global pnpm@10`.
+
+Verify all three tools before continuing:
+
+```bash
+node --version
+git --version
+pnpm --version
+```
+
+### 2. Download the runner
+
+Do this once, then keep using the same checkout for every target:
+
+```bash
+git clone https://github.com/aagedal/FS_Tester.git
+cd FS_Tester
+```
+
+No project dependency installation is needed to use the CLI. If you also want to run the dashboard on your own computer, run `npm install` followed by `npm run dev` from inside `FS_Tester`.
+
+### 3. Choose a target folder
+
+`--target` means “create the temporary benchmark checkout here.” The filesystem containing that folder is the filesystem being tested.
+
+| What you want to test | Example target |
+| --- | --- |
+| The disk containing the `FS_Tester` checkout | `.` |
+| An external macOS volume | `"/Volumes/My SSD"` |
+| A filesystem inside a Linux VM | `/home/me` or `/mnt/xfs` |
+
+On macOS, run `ls /Volumes` to see the exact names of connected volumes. If the name contains spaces, keep the quotation marks around the path.
+
+The target must already exist and should have several GiB free. Connecting or mounting a drive is not enough if you still pass `.`—use the external volume’s path explicitly.
+
+### 4. Inspect the target before writing
+
+```bash
+node bin/fs-bench.mjs doctor --target "/Volumes/My SSD"
+```
+
+Confirm that the reported filesystem, disk, mount point, and encryption state match the setup you intended to test.
+
+### 5. Pick a suite and run it
+
+For Git clean and pnpm install timing:
 
 ```bash
 node bin/fs-bench.mjs run \
@@ -44,22 +106,26 @@ node bin/fs-bench.mjs run \
   --out fsbench-result.json
 ```
 
-The runner creates a uniquely named temporary checkout inside the target, warms the pnpm store, then measures alternating `git clean` and offline `pnpm install` operations. It only runs destructive clean commands inside that temporary checkout and removes the checkout afterward. Pass `--keep` if you want to inspect it.
-
-Import `fsbench-result.json` into the dashboard with **Import results**.
-
-## Run the worktree density suite
-
-The worktree suite measures one creation, eight parallel creations, clean allocation per worktree, and installed allocation per worktree:
+For worktree creation speed **and storage per worktree**:
 
 ```bash
 node bin/fs-bench.mjs worktrees \
   --target "/Volumes/Benchmark" \
   --worktrees 8 \
   --pnpm-import-method auto \
-  --label "APFS internal" \
+  --label "External APFS · unencrypted" \
   --out fsbench-worktrees.json
 ```
+
+The runner creates a uniquely named temporary checkout inside the target, warms the pnpm store, and performs the selected measurements. It only runs destructive clean commands inside that temporary checkout and removes the checkout afterward. Pass `--keep` if you want to inspect it.
+
+### 6. Import the result
+
+Open the dashboard, choose **Import results**, and select `fsbench-result.json` or `fsbench-worktrees.json`. Imported results remain in that browser’s local storage.
+
+## Worktree density and VDO details
+
+The worktree suite measures one creation, eight parallel creations, clean allocation per worktree, and installed allocation per worktree. Use exactly the same `--worktrees` and `--pnpm-import-method` values when comparing filesystems.
 
 On a VDO-backed XFS mount, add the VDO stats device. This switches the primary storage result from `du` to the incremental physical-used value reported by `vdostats`, while retaining the logical directory allocation in the JSON:
 

@@ -42,6 +42,9 @@ test("keeps the runner isolated and the starter removed", async () => {
   assert.match(runner, /tempRoot\.startsWith/);
   assert.match(page, /window\.localStorage/);
   assert.match(page, /Import results/);
+  assert.match(page, /Install the required tools/);
+  assert.match(page, /This page displays results; it cannot access your disks/);
+  assert.match(page, /brew install node git/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
 });

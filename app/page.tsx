@@ -58,6 +58,7 @@ const worktreeSamples: WorktreeResult[] = [
 
 const fmt = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)}s`;
 const fmtGiB = (value: number) => `${value.toFixed(3)} GiB`;
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
 function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
@@ -72,7 +73,8 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(false);
   const [toast, setToast] = useState("");
-  const [target, setTarget] = useState("/Volumes/Benchmark");
+  const [target, setTarget] = useState(".");
+  const [label, setLabel] = useState("Internal APFS");
   const [iterations, setIterations] = useState(5);
   const [suite, setSuite] = useState<"pnpm" | "worktrees">("pnpm");
   const [vdoDevice, setVdoDevice] = useState("");
@@ -101,9 +103,13 @@ export default function Home() {
   const chartRuns = filtered.slice(0, 6);
   const maxValue = Math.max(...chartRuns.map((run) => run[metric]), 1);
   const spaceMax = Math.max(...worktrees.map((run) => run[spaceMetric] ?? 0), 1);
+  const macDependencyCommand = "brew install node git\nnpm install --global pnpm@10";
+  const linuxDependencyCommand = "sudo apt update\nsudo apt install git\nnpm install --global pnpm@10";
+  const setupCommand = "git clone https://github.com/aagedal/FS_Tester.git\ncd FS_Tester";
+  const doctorCommand = `node bin/fs-bench.mjs doctor --target ${shellQuote(target)}`;
   const command = suite === "pnpm"
-    ? `node bin/fs-bench.mjs run --target "${target}" --iterations ${iterations} --out fsbench-result.json`
-    : `node bin/fs-bench.mjs worktrees --target "${target}" --worktrees 8${vdoDevice ? ` --vdo-device "${vdoDevice}"` : ""} --out fsbench-worktrees.json`;
+    ? `node bin/fs-bench.mjs run --target ${shellQuote(target)} --iterations ${iterations} --label ${shellQuote(label)} --out fsbench-result.json`
+    : `node bin/fs-bench.mjs worktrees --target ${shellQuote(target)} --worktrees 8${vdoDevice ? ` --vdo-device ${shellQuote(vdoDevice)}` : ""} --label ${shellQuote(label)} --out fsbench-worktrees.json`;
 
   function persist(imported: Run[]) {
     const custom = [...imported, ...runs.filter((run) => run.source === "imported")];
@@ -122,9 +128,9 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 2600);
   }
 
-  async function copyCommand() {
-    await navigator.clipboard.writeText(command);
-    showToast("Runner command copied");
+  async function copyText(value: string, message: string) {
+    await navigator.clipboard.writeText(value);
+    showToast(message);
   }
 
   function importFile(event: ChangeEvent<HTMLInputElement>) {
@@ -420,19 +426,52 @@ export default function Home() {
       </section>
 
       {modal && <div className="modalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(false); }}>
-        <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <section className="modal runGuide" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <button className="close" aria-label="Close" onClick={() => setModal(false)}>×</button>
-          <p className="kicker">LOCAL CLI RUNNER</p><h2 id="modal-title">Prepare a benchmark</h2>
-          <p className="modalIntro">Choose the volume and suite to measure. Both suites use an isolated temporary clone; the worktree suite also records clean and installed storage per worktree.</p>
-          <label className="field"><span>Target volume or folder</span><input value={target} onChange={(event) => setTarget(event.target.value)} /></label>
-          <div className="fieldRow">
-            <label className="field"><span>Iterations</span><select value={iterations} onChange={(event) => setIterations(Number(event.target.value))}><option value="3">3 · quick</option><option value="5">5 · recommended</option><option value="9">9 · thorough</option></select></label>
-            <label className="field"><span>Suite</span><select value={suite} onChange={(event) => setSuite(event.target.value as "pnpm" | "worktrees")}><option value="pnpm">Git clean + pnpm install</option><option value="worktrees">Worktree speed + storage</option></select></label>
-          </div>
-          {suite === "worktrees" && <label className="field"><span>VDO device (optional)</span><input value={vdoDevice} onChange={(event) => setVdoDevice(event.target.value)} placeholder="e.g. vg_name-vpool0-vpool" /><small>Run this command inside Linux when using VDO. The runner reads `vdostats` physical-used deltas; leave blank for filesystem-allocated `du` measurements.</small></label>}
-          <div className="command"><code>{command}</code><button onClick={copyCommand}>Copy</button></div>
-          <div className="callout"><span>i</span><p><strong>Run this in Terminal.</strong> The browser cannot access local disks. When it finishes, import the generated JSON here.</p></div>
-          <div className="modalActions"><button className="secondary" onClick={() => setModal(false)}>Cancel</button><button className="primary" onClick={copyCommand}>Copy command <span>→</span></button></div>
+          <p className="kicker">RUN LOCALLY IN TERMINAL</p><h2 id="modal-title">Run a benchmark</h2>
+          <p className="modalIntro">This page displays results; it cannot access your disks. Run the small CLI on the machine being tested, then import the JSON it creates.</p>
+
+          <div className="beginnerNote"><strong>New to this?</strong><span>On macOS, open <b>Terminal</b> from Applications → Utilities. On Linux, open your terminal app. Paste one command block at a time and press Return.</span></div>
+
+          <ol className="runSteps">
+            <li>
+              <div className="stepTitle"><span>1</span><div><strong>Install the required tools</strong><small>You need Node.js 22.13 or newer, Git, and pnpm 10. Use the block for the system where the test will run.</small></div></div>
+              <div className="dependencyGrid">
+                <div><strong>macOS</strong><small>If <b>brew</b> is missing, install it first from <a href="https://brew.sh" target="_blank" rel="noreferrer">brew.sh ↗</a>.</small><div className="command compact"><code>{macDependencyCommand}</code><button onClick={() => copyText(macDependencyCommand, "macOS install commands copied")}>Copy</button></div></div>
+                <div><strong>Ubuntu / Debian</strong><small>Install current Node.js LTS from <a href="https://nodejs.org/en/download" target="_blank" rel="noreferrer">nodejs.org ↗</a> first.</small><div className="command compact"><code>{linuxDependencyCommand}</code><button onClick={() => copyText(linuxDependencyCommand, "Linux install commands copied")}>Copy</button></div></div>
+              </div>
+            </li>
+            <li>
+              <div className="stepTitle"><span>2</span><div><strong>Download the runner once</strong><small>This creates an <b>FS_Tester</b> folder and moves Terminal into it. The test commands below must be run from this folder.</small></div></div>
+              <div className="command compact"><code>{setupCommand}</code><button onClick={() => copyText(setupCommand, "Setup commands copied")}>Copy</button></div>
+            </li>
+            <li>
+              <div className="stepTitle"><span>3</span><div><strong>Choose what to test</strong><small>The temporary checkout is created inside this folder, so its underlying filesystem is the one measured.</small></div></div>
+              <div className="fieldRow targetFields">
+                <label className="field"><span>Target folder</span><input value={target} onChange={(event) => setTarget(event.target.value)} /><small><b>.</b> tests the disk containing FS_Tester. External example: <b>/Volumes/My SSD</b>. Linux example: <b>/home/me</b>.</small></label>
+                <label className="field"><span>Result label</span><input value={label} onChange={(event) => setLabel(event.target.value)} /><small>Describe the setup, e.g. “External APFS · unencrypted”.</small></label>
+              </div>
+            </li>
+            <li>
+              <div className="stepTitle"><span>4</span><div><strong>Inspect before writing</strong><small>Paste this in the same Terminal window. It only reports the OS, disk, filesystem, encryption, and tool versions.</small></div></div>
+              <div className="command compact"><code>{doctorCommand}</code><button onClick={() => copyText(doctorCommand, "Inspection command copied")}>Copy</button></div>
+            </li>
+            <li>
+              <div className="stepTitle"><span>5</span><div><strong>Select and run a suite</strong><small>The pnpm suite measures clean/install speed. The worktree suite measures creation speed and storage usage.</small></div></div>
+              <div className="fieldRow suiteFields">
+                <label className="field"><span>Suite</span><select value={suite} onChange={(event) => setSuite(event.target.value as "pnpm" | "worktrees")}><option value="pnpm">Git clean + pnpm install</option><option value="worktrees">Worktree speed + storage</option></select></label>
+                {suite === "pnpm" && <label className="field"><span>Timing pairs</span><select value={iterations} onChange={(event) => setIterations(Number(event.target.value))}><option value="3">3 · quick</option><option value="5">5 · recommended</option><option value="9">9 · thorough</option></select></label>}
+                {suite === "worktrees" && <label className="field"><span>VDO device (only for XFS + VDO)</span><input value={vdoDevice} onChange={(event) => setVdoDevice(event.target.value)} placeholder="Leave blank for normal filesystems" /><small>Inside Linux, enter the device shown by <b>vdostats</b> to record physical allocation.</small></label>}
+              </div>
+              <div className="command"><code>{command}</code><button onClick={() => copyText(command, "Benchmark command copied")}>Copy</button></div>
+            </li>
+            <li>
+              <div className="stepTitle"><span>6</span><div><strong>Import the result</strong><small>When the command finishes, find <b>{suite === "pnpm" ? "fsbench-result.json" : "fsbench-worktrees.json"}</b> inside the <b>FS_Tester</b> folder. Choose “Import results” on this page and select that file.</small></div></div>
+            </li>
+          </ol>
+
+          <div className="callout"><span>✓</span><p><strong>What gets written?</strong> A uniquely named <b>.fs-bench-…</b> folder is created only inside the target and removed after the run. The runner never formats, partitions, or alters a volume. Keep several GiB free.</p></div>
+          <div className="modalActions"><a href="https://github.com/aagedal/FS_Tester#run-your-first-benchmark" target="_blank" rel="noreferrer">Full instructions ↗</a><button className="primary" onClick={() => copyText(command, "Benchmark command copied")}>Copy benchmark command <span>→</span></button></div>
         </section>
       </div>}
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
