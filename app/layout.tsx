@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(process.env.SITE_URL ?? "https://fs-bench-lab.truls-aagedal.chatgpt.site"),
   title: "FS Bench Lab",
   description: "A fair, reproducible workspace for developer filesystem benchmarks.",
   openGraph: {
