@@ -40,6 +40,19 @@ function executeAsync(executable, params, cwd) {
       : rejectPromise(new Error(`${executable} exited with status ${status ?? "unknown"}`)));
   });
 }
+function cloneWorkload(repoPath, cwd) {
+  execute("git", ["clone", "--depth", "1", REPOSITORY, repoPath], cwd);
+  const requestedRevision = option("revision", "");
+  if (requestedRevision && runText("git", ["-C", repoPath, "rev-parse", "HEAD"]) !== requestedRevision) {
+    execute("git", ["-C", repoPath, "fetch", "--depth", "1", "origin", requestedRevision], cwd);
+    execute("git", ["-C", repoPath, "checkout", "--detach", "FETCH_HEAD"], cwd);
+  }
+  return runText("git", ["-C", repoPath, "rev-parse", "HEAD"]);
+}
+function removeTemporaryCheckout(tempRoot, target) {
+  if (!tempRoot.startsWith(`${target}/.fs-bench-`)) return;
+  rmSync(tempRoot, { recursive:true, force:true, maxRetries:10, retryDelay:500 });
+}
 function directoryKib(path) {
   const value = runText("du", ["-sk", path]).split(/\s+/)[0];
   if (!/^\d+$/.test(value)) throw new Error(`Could not measure allocated storage for ${path}`);
@@ -53,15 +66,41 @@ function vdoUsedKib(device) {
   return Number(fields[2]);
 }
 
+function macMountInfo(target) {
+  const dfLine = runText("df", ["-P", target]).split("\n").at(-1) ?? "";
+  const fields = dfLine.trim().split(/\s+/);
+  const source = fields[0] || "unknown";
+  const fallbackMount = fields.slice(5).join(" ") || target;
+  const entries = runText("mount", []).split("\n").map((line) => {
+    const match = line.match(/^(.+?) on (.+?) \((.+)\)$/);
+    return match ? { source:match[1], mount:match[2], options:match[3] } : null;
+  }).filter(Boolean);
+  const entry = entries
+    .filter((candidate) => target === candidate.mount || target.startsWith(`${candidate.mount}/`))
+    .sort((a, b) => b.mount.length - a.mount.length)[0]
+    ?? entries.find((candidate) => candidate.source === source && candidate.mount === fallbackMount);
+  return { source, mount:entry?.mount ?? fallbackMount, mountOptions:entry?.options ?? "unknown" };
+}
+
 function filesystemInfo(target) {
   if (platform() === "darwin") {
-    const dfLine = runText("df", ["-P", target]).split("\n").at(-1) ?? "";
-    const mount = dfLine.trim().split(/\s+/).slice(5).join(" ") || target;
+    const { source, mount, mountOptions } = macMountInfo(target);
+    if (/(^|,)nfs(?:,|$)/i.test(mountOptions)) {
+      return {
+        filesystem:"NFS",
+        encrypted:false,
+        encryptionStatus:"unknown",
+        disk:source,
+        mount,
+        mountOptions,
+        filesystemTransport:"NFS",
+      };
+    }
     const info = runText("diskutil", ["info", mount]);
     const field = (name) => info.match(new RegExp(`^\\s*${name}:\\s*(.+)$`, "mi"))?.[1]?.trim() ?? "unknown";
     const volume = field("Volume Name");
     const location = field("Device Location");
-    return { filesystem:field("File System Personality"), encrypted:/^\s*(Encrypted|FileVault):\s*Yes/im.test(info), disk:location === "unknown" ? volume : `${volume} · ${location}`, mount:field("Mount Point") };
+    return { filesystem:field("File System Personality"), encrypted:/^\s*(Encrypted|FileVault):\s*Yes/im.test(info), encryptionStatus:"known", disk:location === "unknown" ? volume : `${volume} · ${location}`, mount:field("Mount Point"), mountOptions };
   }
   if (platform() === "linux") {
     const filesystem = runText("findmnt", ["-n", "-o", "FSTYPE", "--target", target]);
@@ -103,7 +142,7 @@ function systemInfo(target) {
     : runText("sh", ["-c", "lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1"]);
   const virtualization = platform() === "linux" ? runText("systemd-detect-virt", []) : "None";
   const normalizedVirtualization = virtualization === "none" || virtualization === "unknown" ? "None" : virtualization;
-  return {
+  const info = {
     ...operatingSystemInfo(),
     environment:platform() === "darwin" ? "Native macOS" : platform() === "linux" ? (normalizedVirtualization === "None" ? "Native Linux" : "Linux VM") : "Local",
     cpu,
@@ -113,6 +152,18 @@ function systemInfo(target) {
     pnpm:runText("pnpm", ["--version"]),
     git:runText("git", ["--version"]),
     ...filesystemInfo(target),
+  };
+  const filesystemProvider = option("provider", "");
+  const backingFilesystem = option("backing-filesystem", "");
+  const metadataWarnings = [];
+  if (/^anylinuxfs$/i.test(filesystemProvider) && info.filesystem !== "NFS") {
+    metadataWarnings.push("AnyLinuxFS was specified, but the target is not on an NFS mount.");
+  }
+  return {
+    ...info,
+    ...(filesystemProvider ? { filesystemProvider } : {}),
+    ...(backingFilesystem ? { backingFilesystem } : {}),
+    ...(metadataWarnings.length ? { metadataWarnings } : {}),
   };
 }
 
@@ -130,9 +181,12 @@ Options:
   --out          Result JSON path (default: fsbench-result.json)
   --keep         Keep the isolated benchmark checkout after the run
   --label        Human-readable result label
+  --revision     Exact workload Git revision to replay
   --worktrees    Parallel worktree count (default: 8)
   --vdo-device   VDO stats device; enables physical-used delta measurement
   --pnpm-import-method  auto, hardlink, copy, clone, or clone-or-copy
+  --provider       Filesystem bridge/provider, for example AnyLinuxFS
+  --backing-filesystem  Filesystem behind a bridge, for example ext4
 
 The runner never cleans an existing project. It creates and later removes its own
 temporary clone inside the target path.`);
@@ -200,8 +254,7 @@ async function runWorktreeBenchmark() {
 
   try {
     console.log(`\nFS Bench Lab · worktree suite\n${tempRoot}\n`);
-    execute("git", ["clone", "--depth", "1", REPOSITORY, repoPath], target);
-    result.repositoryRevision = runText("git", ["-C", repoPath, "rev-parse", "HEAD"]);
+    result.repositoryRevision = cloneWorkload(repoPath, target);
     console.log("\nWarming pnpm store (not measured)…");
     execute("pnpm", ["install", `--package-import-method=${importMethod}`], repoPath);
     Object.assign(result, systemInfo(repoPath));
@@ -248,7 +301,7 @@ async function runWorktreeBenchmark() {
     process.exitCode = 1;
   } finally {
     if (has("keep")) console.log(`Kept isolated checkout: ${tempRoot}`);
-    else if (tempRoot.startsWith(`${target}/.fs-bench-`)) rmSync(tempRoot, { recursive:true, force:true });
+    else removeTemporaryCheckout(tempRoot, target);
   }
 }
 
@@ -264,8 +317,7 @@ const result = { schemaVersion:2, suite:"pnpm", status:"running", date:new Date(
 
 try {
   console.log(`\nFS Bench Lab · isolated workspace\n${tempRoot}\n`);
-  execute("git", ["clone", "--depth", "1", REPOSITORY, repoPath], target);
-  result.repositoryRevision = runText("git", ["-C", repoPath, "rev-parse", "HEAD"]);
+  result.repositoryRevision = cloneWorkload(repoPath, target);
   console.log("\nWarming pnpm store (not measured)…");
   execute("pnpm", ["install", `--package-import-method=${importMethod}`], repoPath);
   Object.assign(result, systemInfo(repoPath));
@@ -296,5 +348,5 @@ try {
   process.exitCode = 1;
 } finally {
   if (has("keep")) console.log(`Kept isolated checkout: ${tempRoot}`);
-  else if (tempRoot.startsWith(`${target}/.fs-bench-`)) rmSync(tempRoot, { recursive:true, force:true });
+  else removeTemporaryCheckout(tempRoot, target);
 }

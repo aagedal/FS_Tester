@@ -144,6 +144,57 @@ Run plain XFS and XFS + VDO in the same Linux guest with the same virtual-disk c
 
 The runner does not create, format, resize, or remove volumes.
 
+## Benchmark AnyLinuxFS against APFS
+
+AnyLinuxFS exposes the Linux filesystem to macOS over NFS, so record both the
+host-visible transport and the filesystem mounted inside its microVM. Start with
+pnpm's `auto` import method on both targets. This measures the practical developer
+experience, including the storage primitives available through each path.
+
+First capture the APFS baseline:
+
+```bash
+node bin/fs-bench.mjs run \
+  --target . \
+  --iterations 5 \
+  --pnpm-import-method auto \
+  --label "Internal APFS · encrypted · auto import" \
+  --out fsbench-apfs.json
+```
+
+Install and mount AnyLinuxFS by following its upstream instructions. Once
+`anylinuxfs status` reports the volume mounted, replace the example path and
+backing filesystem below with the actual values:
+
+```bash
+node bin/fs-bench.mjs doctor \
+  --target "/Volumes/Linux" \
+  --provider AnyLinuxFS \
+  --backing-filesystem ext4
+
+node bin/fs-bench.mjs run \
+  --target "/Volumes/Linux" \
+  --iterations 5 \
+  --revision "REVISION_FROM_THE_APFS_RESULT" \
+  --pnpm-import-method auto \
+  --provider AnyLinuxFS \
+  --backing-filesystem ext4 \
+  --label "AnyLinuxFS · ext4 · auto import" \
+  --out fsbench-anylinuxfs-ext4.json
+```
+
+Copy `repositoryRevision` from the APFS result into `--revision` for the
+AnyLinuxFS run. Run each command at least twice and treat the first complete run
+as warm-up if the package store was cold. Compare medians from the same macOS
+build, workload revision, AnyLinuxFS configuration, and power/thermal state. The result is a
+comparison of APFS with the full AnyLinuxFS microVM-plus-NFS path, not a direct
+APFS-versus-ext4 filesystem-only measurement.
+
+For a second, stricter control, repeat both runs with
+`--pnpm-import-method copy`. That forces the same import strategy but can be
+dramatically slower on large dependency trees; treat it as a separate experiment
+and do not mix its samples with the `auto` results.
+
 ## Linux filesystems on the internal Mac SSD
 
 There are three materially different setups:

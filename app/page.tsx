@@ -11,6 +11,9 @@ type Run = {
   osBuild?: string;
   osReleaseChannel?: "stable" | "pre-release" | "unknown";
   filesystem: string;
+  filesystemProvider?: string;
+  filesystemTransport?: string;
+  backingFilesystem?: string;
   encrypted: boolean;
   disk: string;
   cpu: string;
@@ -66,6 +69,11 @@ const worktreeSamples: WorktreeResult[] = [
 const fmt = (value: number) => `${value.toFixed(value < 10 ? 2 : 1)}s`;
 const fmtGiB = (value: number) => `${value.toFixed(3)} GiB`;
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+const filesystemLabel = (run: Pick<Run, "filesystem" | "filesystemProvider" | "filesystemTransport" | "backingFilesystem">) => {
+  if (!run.backingFilesystem && !run.filesystemProvider) return run.filesystem;
+  const bridge = run.filesystemProvider ?? run.filesystemTransport ?? run.filesystem;
+  return `${run.backingFilesystem ?? run.filesystem} via ${bridge}${run.filesystemTransport && run.filesystemTransport !== bridge ? ` (${run.filesystemTransport})` : ""}`;
+};
 
 function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
@@ -105,7 +113,7 @@ export default function Home() {
       (filter === "Linux VM" && run.virtualization !== "None") ||
       (filter === "Native Linux" && run.environment === "Native Linux") ||
       (filter === "Encrypted" && run.encrypted);
-    const haystack = `${run.label} ${run.os} ${run.filesystem} ${run.cpu}`.toLowerCase();
+    const haystack = `${run.label} ${run.os} ${filesystemLabel(run)} ${run.cpu}`.toLowerCase();
     const osMatch = osFilter === "All OS versions" || run.os === osFilter;
     return groupMatch && osMatch && haystack.includes(query.toLowerCase());
   }), [filter, osFilter, query, runs]);
@@ -216,6 +224,9 @@ export default function Home() {
             osBuild:item.osBuild == null ? undefined : String(item.osBuild),
             osReleaseChannel:item.osReleaseChannel === "stable" || item.osReleaseChannel === "pre-release" ? item.osReleaseChannel : "unknown",
             filesystem: String(item.filesystem ?? "Unknown"),
+            filesystemProvider:item.filesystemProvider == null ? undefined : String(item.filesystemProvider),
+            filesystemTransport:item.filesystemTransport == null ? undefined : String(item.filesystemTransport),
+            backingFilesystem:item.backingFilesystem == null ? undefined : String(item.backingFilesystem),
             encrypted: Boolean(item.encrypted),
             disk: String(item.disk ?? "Unknown disk"),
             cpu: String(item.cpu ?? "Unknown CPU"),
@@ -320,7 +331,7 @@ export default function Home() {
               <div className="chartTop"><span>Median duration · lower is better</span><span>seconds</span></div>
               <div className="bars">
                 {chartRuns.map((run) => <div className="barRow" key={run.id}>
-                  <div className="barLabel"><strong>{run.label}</strong><small>{run.filesystem} · {run.os}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></div>
+                  <div className="barLabel"><strong>{run.label}</strong><small>{filesystemLabel(run)} · {run.os}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></div>
                   <div className="barTrack"><i className={run.environment === "Native macOS" ? "macBar" : "linuxBar"} style={{width:`${Math.max(3, run[metric] / maxValue * 100)}%`}}></i></div>
                   <strong className="barValue">{fmt(run[metric])}</strong>
                 </div>)}
@@ -430,7 +441,7 @@ export default function Home() {
                 <tbody>{filtered.map((run) => <tr key={run.id}>
                   <td><div className="tablePrimary"><span className={`deviceMark ${run.environment === "Native macOS" ? "mac" : "linux"}`}>{run.environment === "Native macOS" ? "M" : "L"}</span><span><strong>{run.label}</strong><small>{run.cpu}</small></span></div></td>
                   <td><strong>{run.os}</strong><small>{run.osBuild ? `Build ${run.osBuild}` : "Build not recorded"}{run.osReleaseChannel === "pre-release" ? " · pre-release" : ""}</small></td>
-                  <td><strong>{run.filesystem}</strong><small>{run.disk}</small></td>
+                  <td><strong>{filesystemLabel(run)}</strong><small>{run.disk}</small></td>
                   <td><div className="pills"><span>{run.encrypted ? "Encrypted" : "Unencrypted"}</span>{run.virtualization !== "None" && <span>{run.virtualization}</span>}</div><small>{run.note}</small></td>
                   <td className="number">{fmt(run.clean)}</td><td className="number">{fmt(run.install)}</td><td><strong>{run.date}</strong><small>{run.iterations} iteration{run.iterations === 1 ? "" : "s"}</small></td>
                 </tr>)}</tbody>

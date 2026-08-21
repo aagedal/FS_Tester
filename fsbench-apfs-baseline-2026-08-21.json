@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "suite": "pnpm",
+  "status": "complete",
+  "date": "2026-08-21",
+  "label": "Internal APFS · encrypted · auto import",
+  "target": "/Users/truls.aagedal/Developer/FS_Tester",
+  "iterations": 3,
+  "repository": "https://github.com/NullVoxPopuli/disk-perf-git-and-pnpm.git",
+  "repositoryRevision": "9df8c4984b6186f430a0a142a8788cbdac5a3ad1",
+  "pnpmImportMethod": "auto",
+  "note": "Created by FS Bench Lab CLI",
+  "measurements": {
+    "cleanSeconds": [
+      109.8977,
+      113.6845,
+      139.4705
+    ],
+    "installSeconds": [
+      125.9221,
+      174.9861,
+      186.0367
+    ]
+  },
+  "os": "macOS 27.0",
+  "osVersion": "27.0",
+  "osBuild": "26A5416b",
+  "osReleaseChannel": "pre-release",
+  "kernel": "Darwin 27.0.0",
+  "environment": "Native macOS",
+  "cpu": "Apple M5 Pro",
+  "memoryGb": 64,
+  "virtualization": "None",
+  "node": "v26.7.0",
+  "pnpm": "11.22.0",
+  "git": "git version 2.55.0",
+  "filesystem": "APFS",
+  "encrypted": true,
+  "encryptionStatus": "known",
+  "disk": "Data · Internal",
+  "mount": "/System/Volumes/Data",
+  "mountOptions": "apfs, local, journaled, nobrowse, protect, root data",
+  "clean": 113.6845,
+  "install": 174.9861
+}

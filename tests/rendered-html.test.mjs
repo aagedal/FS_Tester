@@ -45,12 +45,17 @@ test("keeps the runner isolated and the starter removed", async () => {
   assert.match(runner, /sw_vers/);
   assert.match(runner, /osReleaseChannel/);
   assert.match(runner, /environment:platform\(\) === "darwin"/);
+  assert.match(runner, /filesystem:"NFS"/);
+  assert.match(runner, /filesystemTransport:"NFS"/);
+  assert.match(runner, /option\("revision"/);
+  assert.match(runner, /maxRetries:10/);
   assert.match(runner, /tempRoot\.startsWith/);
   assert.match(page, /window\.localStorage/);
   assert.match(page, /Import results/);
   assert.match(page, /Install the required tools/);
   assert.match(page, /This page displays results; it cannot access your disks/);
   assert.match(page, /brew install node git/);
+  assert.match(page, /backingFilesystem/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
 });
